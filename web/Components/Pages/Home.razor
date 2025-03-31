@@ -1,0 +1,81 @@
+﻿@page "/"
+@attribute [StreamRendering]
+@inject ISalesSource salesSource
+
+<PageTitle>Summary</PageTitle>
+
+<h1>Sales</h1>
+
+@if (summary == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Country</th>
+                <th>Total Sales</th>
+                <th>Total Units</th>
+                <th>Gross Sales</th>
+                <th>Gross Profit</th>
+                <th>Average Profit / Unit</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var line in summary)
+            {
+                <tr>
+                    <td>@line.Country</td>
+                    <td>@line.Count</td>
+                    <td>@line.UnitsCount.ToString("0.0")</td>
+                    <td>£@line.GrossSales.ToString("###,###,##0.00")</td>
+                    <td>£@line.GrossProfit.ToString("###,###,##0.00")</td>
+                    <td>£@line.AverageProfitPerUnit.ToString("0.000")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<SummaryLine>? summary;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var sales = await salesSource.GetAllSalesAsync().ToListAsync();
+
+        summary = sales
+            .GroupBy(sale => sale.Country)
+            .Select(group => new SummaryLine
+            {
+                Country = group.Key,
+                Count = group.Count(),
+                UnitsCount = group.Sum(sale => sale.UnitsSold),
+                GrossSales = group.Sum(sale => (sale.SalesPriceGbp ?? 0) * sale.UnitsSold),
+                GrossProfit = group
+                    .Where(sale => sale.SalesPriceGbp.HasValue && sale.ManufacturingPriceGbp.HasValue)
+                    .Sum(sale => (sale.SalesPriceGbp!.Value - sale.ManufacturingPriceGbp!.Value) * sale.UnitsSold),
+                AverageProfitPerUnit = group
+                    .Where(sale => sale.SalesPriceGbp.HasValue && sale.ManufacturingPriceGbp.HasValue)
+                    .Average(sale => sale.SalesPriceGbp!.Value - sale.ManufacturingPriceGbp!.Value)
+            })
+            .ToList();
+    }
+
+    private class SummaryLine
+    {
+        public string? Country { get; set; }
+
+        public int Count { get; set; }
+
+        public decimal UnitsCount { get; set; }
+
+        public decimal GrossSales { get; set; }
+
+        public decimal GrossProfit { get; set; }
+
+        public decimal AverageProfitPerUnit { get; set; }
+    }
+}
